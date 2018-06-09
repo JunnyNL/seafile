@@ -24,12 +24,9 @@
 #include <ccnet.h>
 #include <searpc-server.h>
 #include <searpc-named-pipe-transport.h>
-#include <searpc-client.h>
 
 #include "seafile-session.h"
 #include "seafile-rpc.h"
-#include <ccnet/rpcserver-proc.h>
-#include <ccnet/threaded-rpcserver-proc.h>
 #include "log.h"
 #include "utils.h"
 #include "vc-utils.h"
@@ -46,9 +43,6 @@
 
 
 SeafileSession *seaf;
-SearpcClient *ccnetrpc_client;
-SearpcClient *appletrpc_client;
-CcnetClient *bind_client;
 
 static const char *short_options = "hvc:d:w:l:D:bg:G:";
 static struct option long_options[] = {
@@ -160,21 +154,6 @@ register_rpc_service ()
                                      searpc_signature_string__string_string());
 
     searpc_server_register_function ("seafile-rpcserver",
-                                     seafile_get_repo_relay_address,
-                                     "seafile_get_repo_relay_address",
-                                     searpc_signature_string__string());
-
-    searpc_server_register_function ("seafile-rpcserver",
-                                     seafile_get_repo_relay_port,
-                                     "seafile_get_repo_relay_port",
-                                     searpc_signature_string__string());
-
-    searpc_server_register_function ("seafile-rpcserver",
-                                     seafile_update_repo_relay_info,
-                                     "seafile_update_repo_relay_info",
-                                     searpc_signature_int__string_string_string());
-
-    searpc_server_register_function ("seafile-rpcserver",
                                      seafile_update_repos_server_host,
                                      "seafile_update_repos_server_host",
                                      searpc_signature_int__string_string_string());
@@ -255,21 +234,6 @@ register_rpc_service ()
     searpc_server_register_function ("seafile-rpcserver",
                                      seafile_get_repo_sync_info,
                                      "seafile_get_repo_sync_info",
-                                     searpc_signature_object__string());
-
-    searpc_server_register_function ("seafile-rpcserver",
-                                     seafile_get_commit,
-                                     "seafile_get_commit",
-                                     searpc_signature_object__string_int_string());
-    searpc_server_register_function ("seafile-rpcserver",
-                                     seafile_get_commit_list,
-                                     "seafile_get_commit_list",
-                                     searpc_signature_objlist__string_int_int());
-
-
-    searpc_server_register_function ("seafile-rpcserver",
-                                     seafile_get_checkout_task,
-                                     "seafile_get_checkout_task",
                                      searpc_signature_object__string());
 
     searpc_server_register_function ("seafile-rpcserver",
@@ -359,27 +323,6 @@ set_signal_handlers (SeafileSession *session)
 #endif
 }
 
-static void
-create_sync_rpc_clients (const char *config_dir)
-{
-    CcnetClient *sync_client;
-
-    /* sync client and rpc client */
-    sync_client = ccnet_client_new ();
-    if ( (ccnet_client_load_confdir(sync_client, NULL, config_dir)) < 0 ) {
-        seaf_warning ("Read config dir error\n");
-        exit(1);
-    }
-
-    if (ccnet_client_connect_daemon (sync_client, CCNET_CLIENT_SYNC) < 0)
-    {
-        seaf_warning ("Connect to server fail: %s\n", strerror(errno));
-        exit(1);
-    }
-
-    ccnetrpc_client = ccnet_create_rpc_client (sync_client, NULL, "ccnet-rpcserver");
-}
-
 #ifdef WIN32
 /* Get the commandline arguments in unicode, then convert them to utf8  */
 static char **
@@ -405,35 +348,6 @@ get_argv_utf8 (int *argc)
     return argv;
 }
 #endif
-
-/*
- * Bind to an unused service to make sure only one instance of seaf-daemon
- * is running.
- */
-static gboolean
-bind_ccnet_service (const char *config_dir)
-{
-    gboolean ret = TRUE;
-
-    bind_client = ccnet_client_new ();
-    if ( (ccnet_client_load_confdir(bind_client, NULL, config_dir)) < 0 ) {
-        seaf_warning ("Read config dir error\n");
-        exit(1);
-    }
-
-    if (ccnet_client_connect_daemon (bind_client, CCNET_CLIENT_SYNC) < 0)
-    {
-        seaf_warning ("Connect to server fail: %s\n", strerror(errno));
-        exit(1);
-    }
-
-    if (!ccnet_register_service_sync (bind_client,
-                                      "seafile-dummy-service",
-                                      "rpc-inner"))
-        ret = FALSE;
-
-    return ret;
-}
 
 int
 main (int argc, char **argv)
@@ -556,33 +470,17 @@ main (int argc, char **argv)
         exit (1);
     }
 
-    if (!bind_ccnet_service (config_dir)) {
-        seaf_warning ("Failed to bind ccnet service\n");
-        exit (1);
-    }
-
-    /* init ccnet */
-    client = ccnet_init (NULL, config_dir);
-    if (!client)
-        exit (1);
-
-    create_sync_rpc_clients (config_dir);
-    appletrpc_client = ccnet_create_async_rpc_client (client, NULL,
-                                                      "applet-rpcserver");
-
     /* init seafile */
     if (seafile_dir == NULL)
         seafile_dir = g_build_filename (config_dir, "seafile-data", NULL);
     if (worktree_dir == NULL)
         worktree_dir = g_build_filename (g_get_home_dir(), "seafile", NULL);
 
-    seaf = seafile_session_new (seafile_dir, worktree_dir, client);
+    seaf = seafile_session_new (seafile_dir, worktree_dir, config_dir);
     if (!seaf) {
         seaf_warning ("Failed to create seafile session.\n");
         exit (1);
     }
-    seaf->ccnetrpc_client = ccnetrpc_client;
-    seaf->appletrpc_client = appletrpc_client;
 
     seaf_message ("starting seafile client "SEAFILE_CLIENT_VERSION"\n");
 #if defined(SEAFILE_SOURCE_COMMIT_ID)

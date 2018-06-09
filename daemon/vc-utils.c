@@ -13,7 +13,6 @@
 
 #include "utils.h"
 #include "fs-mgr.h"
-#include "merge.h"
 #include "vc-utils.h"
 #include "vc-common.h"
 #include "index/index.h"

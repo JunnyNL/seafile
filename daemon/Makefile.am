@@ -21,7 +21,7 @@ noinst_HEADERS = \
 	repo-mgr.h \
 	status.h sync-mgr.h  \
 	wt-monitor.h \
-	merge.h merge-recursive.h vc-utils.h seafile-session.h \
+	vc-utils.h seafile-session.h \
 	clone-mgr.h \
 	wt-monitor-structs.h \
 	../common/sync-repo-common.h \
@@ -48,7 +48,7 @@ endif
 common_src = \
 	http-tx-mgr.c \
 	../common/unpack-trees.c ../common/seaf-tree-walk.c \
-	merge.c merge-recursive.c vc-utils.c \
+	vc-utils.c \
 	status.c sync-mgr.c seafile-session.c \
 	../common/seafile-crypt.c ../common/diff-simple.c $(wt_monitor_src) \
 	clone-mgr.c \

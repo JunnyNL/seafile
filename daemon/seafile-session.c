@@ -134,23 +134,20 @@ out:
 SeafileSession *
 seafile_session_new(const char *seafile_dir,
                     const char *worktree_dir,
-                    struct _CcnetClient *ccnet_session)
+                    const char *ccnet_dir)
 {
     char *abs_seafile_dir;
     char *abs_worktree_dir;
+    char *abs_ccnet_dir;
     char *tmp_file_dir;
     char *db_path;
     char *deleted_store;
     sqlite3 *config_db;
     SeafileSession *session = NULL;
 
-#ifndef SEAF_TOOL
-    if (!ccnet_session)
-        return NULL;
-#endif    
-
     abs_worktree_dir = ccnet_expand_path (worktree_dir);
     abs_seafile_dir = ccnet_expand_path (seafile_dir);
+    abs_ccnet_dir = ccnet_expand_path (ccnet_dir);
     tmp_file_dir = g_build_filename (abs_seafile_dir, "tmpfiles", NULL);
     db_path = g_build_filename (abs_seafile_dir, "config.db", NULL);
     deleted_store = g_build_filename (abs_seafile_dir, "deleted_store", NULL);
@@ -186,7 +183,7 @@ seafile_session_new(const char *seafile_dir,
     session->seaf_dir = abs_seafile_dir;
     session->tmp_file_dir = tmp_file_dir;
     session->worktree_dir = abs_worktree_dir;
-    session->session = ccnet_session;
+    session->ccnet_dir = abs_ccnet_dir;
     session->config_db = config_db;
     session->deleted_store = deleted_store;
 
@@ -224,7 +221,6 @@ seafile_session_new(const char *seafile_dir,
         goto onerror;
 
     session->job_mgr = ccnet_job_manager_new (MAX_THREADS);
-    ccnet_session->job_mgr = ccnet_job_manager_new (MAX_THREADS);
     session->ev_mgr = cevent_manager_new ();
     if (!session->ev_mgr)
         goto onerror;
@@ -238,6 +234,7 @@ seafile_session_new(const char *seafile_dir,
 onerror:
     free (abs_seafile_dir);
     free (abs_worktree_dir);
+    free (abs_ccnet_dir);
     g_free (tmp_file_dir);
     g_free (db_path);
     g_free (deleted_store);
@@ -295,15 +292,91 @@ out:
         json_decref(json);
 }
 
+static char *
+generate_client_id ()
+{
+    char *uuid = gen_uuid();
+    unsigned char buf[20];
+    char sha1[41];
+
+    calculate_sha1 (buf, uuid, 20);
+    rawdata_to_hex (buf, sha1, 20);
+
+    g_free (uuid);
+    return g_strdup(sha1);
+}
+
+static void
+read_ccnet_conf (const char *ccnet_dir, char **client_id, char **client_name)
+{
+    char *ccnet_conf_path = g_build_path ("/", ccnet_dir, "ccnet.conf", NULL);
+    GKeyFile *key_file = g_key_file_new ();
+    GError *error = NULL;
+
+    if (!g_file_test (ccnet_conf_path, G_FILE_TEST_IS_REGULAR))
+        goto out;
+
+    if (!g_key_file_load_from_file (key_file, ccnet_conf_path, 0, &error)) {
+        seaf_warning ("Failed to read ccnet.conf: %s.\n", error->message);
+        g_clear_error (&error);
+        goto out;
+    }
+
+    *client_id = g_key_file_get_string (key_file, "General", "ID", &error);
+    if (error) {
+        seaf_warning ("Failed to read client id from ccnet.conf: %s.\n", error->message);
+        g_clear_error (&error);
+        goto out;
+    }
+
+    *client_name = g_key_file_get_string (key_file, "General", "NAME", &error);
+    if (error) {
+        seaf_warning ("Failed to read client name from ccnet.conf: %s.\n", error->message);
+        g_clear_error (&error);
+        goto out;
+    }
+
+out:
+    g_free (ccnet_conf_path);
+    g_key_file_free (key_file);
+}
+
 void
 seafile_session_prepare (SeafileSession *session)
 {
-    session->client_name = seafile_session_config_get_string (session, KEY_CLIENT_NAME);
-    if (!session->client_name) {
-        session->client_name = g_strdup(session->session->base.name);
-    }
+    char *client_id = NULL, *client_name = NULL;
 
     /* load config */
+
+    read_ccnet_conf (session->ccnet_dir, &client_id, &client_name);
+
+    session->client_id = seafile_session_config_get_string (session, KEY_CLIENT_ID);
+    if (!session->client_id) {
+        if (client_id) {
+            session->client_id = g_strdup (client_id);
+        } else {
+            session->client_id = generate_client_id();
+        }
+        seafile_session_config_set_string (session,
+                                           KEY_CLIENT_ID,
+                                           session->client_id);
+    }
+
+    session->client_name = seafile_session_config_get_string (session, KEY_CLIENT_NAME);
+    if (!session->client_name) {
+        if (client_name) {
+            session->client_name = g_strdup (client_name);
+            seafile_session_config_set_string (session,
+                                               KEY_CLIENT_NAME,
+                                               session->client_name);
+        } else {
+            session->client_name = g_strdup("unknown");
+        }
+    }
+
+    g_free (client_id);
+    g_free (client_name);
+
     session->sync_extra_temp_file = seafile_session_config_get_bool
         (session, KEY_SYNC_EXTRA_TEMP_FILE);
 

@@ -23,8 +23,6 @@
 #include "http-tx-mgr.h"
 #include "filelock-mgr.h"
 
-#include <searpc-client.h>
-
 struct _CcnetClient;
 
 
@@ -42,17 +40,13 @@ typedef struct _SeafileSessionClass SeafileSessionClass;
 struct _SeafileSession {
     GObject         parent_instance;
 
-    struct _CcnetClient *session;
-
     char                *client_name;
-
-    SearpcClient        *ccnetrpc_client;
-    SearpcClient        *appletrpc_client;
 
     char                *seaf_dir;
     char                *tmp_file_dir;
     char                *worktree_dir; /* the default directory for
                                         * storing worktrees  */
+    char                *ccnet_dir;
     sqlite3             *config_db;
     char                *deleted_store;
     char                *rpc_socket_path;

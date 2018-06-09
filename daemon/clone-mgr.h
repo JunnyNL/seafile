@@ -70,10 +70,7 @@ struct _CloneTask {
     char                *effective_url;
     gboolean             use_fileserver_port;
     int                  http_protocol_version;
-    gboolean             http_sync;
     char                 server_head_id[41];
-
-    gboolean             server_side_merge;
 };
 
 const char *

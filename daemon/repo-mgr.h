@@ -273,17 +273,6 @@ seaf_repo_manager_set_repo_email (SeafRepoManager *manager,
                                   const char *email);
 
 int
-seaf_repo_manager_set_repo_relay_info (SeafRepoManager *manager, 
-                                       const char *repo_id,
-                                       const char *relay_addr,
-                                       const char *relay_port);
-void
-seaf_repo_manager_get_repo_relay_info (SeafRepoManager *mgr,
-                                       const char *repo_id,
-                                       char **relay_addr,
-                                       char **relay_port);
-
-int
 seaf_repo_manager_branch_repo_unmap (SeafRepoManager *manager, SeafBranch *branch);
 
 int
